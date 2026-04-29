@@ -8,7 +8,7 @@
   - 业务链路用例（表头含"链路ID""链路名称""涉及模块"）
 
 用法:
-  python md_testcases_to_excel.py <testcases.md> [-o output.xlsx]
+  python md_testcases_to_excel.py <testcases.md> [more.md ...] [-o output.xlsx]
 
 依赖: pip install openpyxl
 """
@@ -168,6 +168,31 @@ def load_tables_from_md(md_path: Path) -> tuple[list[dict], list[dict]]:
     return functional_rows, chain_rows
 
 
+def merge_rows(rows_list: list[list[dict]], key_field: str) -> list[dict]:
+    """
+    合并多份表格行，按 key_field 去重（保留首次出现）。
+    key_field 为空时直接拼接。
+    """
+    merged: list[dict] = []
+    if not key_field:
+        for rows in rows_list:
+            merged.extend(rows)
+        return merged
+
+    seen = set()
+    for rows in rows_list:
+        for row in rows:
+            key = str(row.get(key_field, "")).strip()
+            if not key:
+                merged.append(row)
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(row)
+    return merged
+
+
 def write_sheet(ws, headers: list[str], rows: list[dict]) -> None:
     """将表头和行数据写入 worksheet。"""
     from openpyxl.styles import Font, Alignment
@@ -190,23 +215,41 @@ def write_sheet(ws, headers: list[str], rows: list[dict]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="导出测试用例 Markdown 表格为 Excel")
-    parser.add_argument("md_file", help="测试用例 Markdown 文件路径（.md，表格格式）")
+    parser.add_argument("md_files", nargs="+", help="测试用例 Markdown 文件路径（可传多个 .md）")
     parser.add_argument("-o", "--output", default=None, help="输出 .xlsx 路径，默认与 MD 同目录同主名")
     args = parser.parse_args()
 
-    md_path = Path(args.md_file)
-    if not md_path.exists():
-        print(f"错误: 文件不存在 {md_path}", file=sys.stderr)
-        sys.exit(1)
-    if md_path.suffix.lower() != ".md":
-        print("错误: 仅支持 .md 输入", file=sys.stderr)
+    md_paths = [Path(p) for p in args.md_files]
+    for p in md_paths:
+        if not p.exists():
+            print(f"错误: 文件不存在 {p}", file=sys.stderr)
+            sys.exit(1)
+        if p.suffix.lower() != ".md":
+            print(f"错误: 仅支持 .md 输入，非法文件 {p}", file=sys.stderr)
+            sys.exit(1)
+
+    functional_parts: list[list[dict]] = []
+    chain_parts: list[list[dict]] = []
+    parse_errors: list[str] = []
+
+    for md_path in md_paths:
+        try:
+            functional_rows, chain_rows = load_tables_from_md(md_path)
+            if functional_rows:
+                functional_parts.append(functional_rows)
+            if chain_rows:
+                chain_parts.append(chain_rows)
+        except Exception as e:
+            parse_errors.append(f"{md_path}: {e}")
+
+    if parse_errors and not (functional_parts or chain_parts):
+        print("错误: 所有输入文件均未解析到有效测试用例表：", file=sys.stderr)
+        for err in parse_errors:
+            print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
 
-    try:
-        functional_rows, chain_rows = load_tables_from_md(md_path)
-    except Exception as e:
-        print(f"错误: {e}", file=sys.stderr)
-        sys.exit(1)
+    functional_rows = merge_rows(functional_parts, "ID")
+    chain_rows = merge_rows(chain_parts, "链路ID")
 
     try:
         import openpyxl
@@ -236,7 +279,7 @@ def main() -> None:
 
     out_path = args.output
     if not out_path:
-        out_path = md_path.with_suffix(".xlsx")
+        out_path = md_paths[0].with_suffix(".xlsx")
     else:
         out_path = Path(out_path)
     wb.save(out_path)
