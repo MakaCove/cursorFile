@@ -12,3 +12,5 @@
 | [validation.md](reference/validation.md) | 校验目录、数据差异、兼容性、优先级建议 | 确定校验用例、分配优先级 |
 | [test-data.md](reference/test-data.md) | 测试数据预设模板 | 快速选取边界值/特殊字符/格式等测试数据 |
 | [review-checklist.md](reference/review-checklist.md) | 用例评审清单模板 | 输出评审清单、评审会议逐项核对 |
+
+**步骤要怎么写到足够细**：以主 Skill 文档中的 **「步骤详细度规范（强制）」** 为准（导航 / 控件文案 / 拆分序号 / 禁止空话）。
